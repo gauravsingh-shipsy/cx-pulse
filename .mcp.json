@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "devrev": {
+      "type": "http",
+      "url": "https://mcp.devrev.ai/mcp"
+    },
+    "slack": {
+      "type": "http",
+      "url": "https://mcp.slack.com/mcp"
+    },
+    "google-drive": {
+      "type": "http",
+      "url": "https://google-drive.mcp.claude.com/mcp"
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "newrelic": {
+      "type": "http",
+      "url": "https://mcp.newrelic.com/mcp",
+      "headers": {
+        "API-Key": "${NEW_RELIC_API_KEY}"
+      }
+    }
+  }
+}

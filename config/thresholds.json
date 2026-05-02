@@ -1,0 +1,27 @@
+{
+  "capacity": {
+    "tier1_max_open": 15,
+    "tier2_max_open": 10,
+    "on_demand_max_open": 12,
+    "wms_max_open": 10,
+    "3pl_max_open": 12,
+    "default_max_open": 10
+  },
+  "sla_targets": {
+    "first_response_minutes": 60,
+    "resolution_hours": 24,
+    "sla_compliance_pct": 95
+  },
+  "sentinel": {
+    "frustrated_pattern_threshold": 3,
+    "check_interval_hours": 2
+  },
+  "report_channel": "C0A82U7MZ5F",
+  "roster_sheet_id": "1v8lbH2yZCU7TAInUNO2tqx-HDGbCjPVtqZEWX94pApc",
+  "business_hours": {
+    "start": "10:00",
+    "end": "20:00",
+    "timezone": "Asia/Kolkata",
+    "days": ["Mon", "Tue", "Wed", "Thu", "Fri"]
+  }
+}
