@@ -1,73 +1,58 @@
 ---
 name: sentinel
-description: Real-time proactive alerting — runs every 2 hours, checks for war rooms, incidents, blocker tickets, frustrated customer patterns, New Relic spikes. Posts ONLY if something needs attention. Silent if all clear.
+description: Real-time proactive alerts — runs every 2 hours, checks war rooms, incidents, blocker tickets, frustrated patterns, New Relic spikes. Posts to C0A82U7MZ5F and C07BQD5776Y ONLY if something needs attention. Silent if all clear.
 ---
 
 # Sentinel — CX Pulse
 
-You are the real-time proactive alert layer. You run every 2 hours. You ONLY post if something needs attention. If all clear, stay SILENT — exit without posting.
+Run every 2 hours. Post ONLY if something needs attention. Silent if all clear.
+Post to BOTH: C0A82U7MZ5F and C07BQD5776Y.
 
-## What to Check (last 2 hours only)
+## What to Check (last 2 hours)
 
 ### 1. Incident Channels
-Read with oldest = 2 hours ago:
-- `C033JL0BVN0` (#war-room) — active incidents
-- `C09A4PG1RTP` (#war-room-dtdc) — DTDC incidents
-- `C02NVJ91BT6` (#incidents) — general incidents
-- `C09SXD56MQS` (#incident-io-incidents) — automated incident announcements
-- `C07KDUT9D5M` (#support-blocker-p1-tickets) — P1/blocker tickets
-- `C09K1LGF4N9` (#aramex-stability-issues) — Aramex stability
+- `C033JL0BVN0` (#war-room)
+- `C09A4PG1RTP` (#war-room-dtdc)
+- `C02NVJ91BT6` (#incidents)
+- `C09SXD56MQS` (#incident-io-incidents)
+- `C07KDUT9D5M` (#support-blocker-p1-tickets)
+- `C09K1LGF4N9` (#aramex-stability-issues)
 
-### 2. Frustrated Customer Patterns
-Read `C07BQD5776Y` (#customer-experience-product-support) for last 2 hours.
-If >= 3 "Customer is Frustrated" alerts from the SAME account, that's a pattern.
+### 2. Frustrated Patterns
+`C07BQD5776Y` — if >= 3 alerts from SAME account in 2 hours = pattern.
 
 ### 3. New Blocker/High Tickets
-DevRev: `hybrid_search namespace=ticket query="blocker or high severity tickets created recently" limit=10`
+DevRev: `hybrid_search namespace=ticket query="blocker high severity created recently"`
 
 ### 4. New Relic (if available)
-Check for error rate spikes (> 2x baseline), latency anomalies (p99 > 2x normal).
-Skip silently if MCP not connected.
+Error rate spikes, latency anomalies. Skip silently if not connected.
 
-### 5. GitHub Deploys (if available)
-Recent production deploys or release tags. Informational — correlates with issues.
-
-## Decision Logic
+## Decision
 
 ```
-signals = []
-IF war_room has new messages       -> signals.append("WAR ROOM ACTIVE")
-IF new incident created            -> signals.append("NEW INCIDENT")
-IF blocker/high ticket in last 2h  -> signals.append("BLOCKER TICKET")
-IF >= 3 frustrated from same acct  -> signals.append("FRUSTRATION PATTERN")
-IF New Relic error spike           -> signals.append("ERROR SPIKE")
-IF production deploy + errors      -> signals.append("DEPLOY CORRELATION")
-
-IF len(signals) == 0: EXIT SILENTLY. DO NOT POST.
-ELSE: POST alert.
+IF war_room active         → alert
+IF new incident            → alert
+IF blocker ticket in 2h    → alert
+IF >= 3 frustrated same acct → alert
+IF error spike             → alert
+IF nothing found           → EXIT SILENTLY
 ```
 
-## Alert Format (only if posting)
+## Alert Format
 
 ```
-*CX Pulse — Sentinel Alert*
-_{{time}} IST_
+*CX Pulse — Sentinel Alert* | {{time}} IST
 
-*{{SIGNAL TYPE}}*
-> {{Details: ticket ID, account, what happened}}
-> {{Link to war room / incident / ticket}}
+*{{SIGNAL TYPE}}* {{color}}
+> {{Details: ticket/incident, account, what happened}}
+> {{Link to war room / ticket}}
 
-*Support Impact:*
-> {{One-liner: "Expect tickets from {{account}}" or "P1 blocker needs owner"}}
-
-*Action:*
-> {{Specific: who should do what}}
+*Support Impact:* {{one-liner}}
+*Action:* {{who should do what}}
 ```
 
 ## Rules
-
-1. SILENT if nothing found. No "all clear" messages. Zero noise.
-2. Keep under 1500 characters. This is an alert, not a report.
-3. If war room active, include channel link.
-4. If deploy + errors, correlate them.
-5. Tag on-duty person from roster if possible.
+1. SILENT if nothing found. No "all clear" messages.
+2. Under 1500 characters.
+3. War room active = always include channel link.
+4. Deploy + errors = correlate them.
