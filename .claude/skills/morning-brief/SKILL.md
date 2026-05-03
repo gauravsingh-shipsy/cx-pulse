@@ -1,11 +1,18 @@
 ---
 name: morning-brief
-description: Generate the daily Morning CX Brief — pulls DevRev tickets, roster from Google Sheet, Slack channel signals. Posts to C0A82U7MZ5F and C07BQD5776Y at 8 AM IST daily.
+description: Generate the daily Morning CX Brief — mirrors vista-549 (Support - open tickets), pulls roster, scans Slack channels. Posts to C0A82U7MZ5F and C07BQD5776Y at 8 AM IST daily. Evening routine compares against this morning baseline.
 ---
 
 # Morning Brief — CX Pulse
 
 Post to TWO channels: C0A82U7MZ5F (leadership DM) and C07BQD5776Y (#customer-experience-product-support).
+
+## Source of Truth
+
+This report mirrors **vista-549 ("Support - open tickets")** in DevRev.
+URL: https://app.devrev.ai/shipsy/vistas/vista-549
+
+Vista-549 shows: subtype=Support, state=open OR in_progress (not closed/resolved/canceled).
 
 ## Execution Steps
 
@@ -13,17 +20,57 @@ Post to TWO channels: C0A82U7MZ5F (leadership DM) and C07BQD5776Y (#customer-exp
 Google Sheet `1v8lbH2yZCU7TAInUNO2tqx-HDGbCjPVtqZEWX94pApc`. Today's column.
 Extract ON DUTY (name + shift) vs OFF (WO/PL). Exclude WMS team (Bhavyank, Dhanasree).
 
-### Step 2: Pull DevRev Tickets
-- `hybrid_search namespace=ticket query="all open support tickets not resolved not closed" limit=50`
-- `hybrid_search namespace=ticket query="support tickets created in last 24 hours" limit=50`
-- `hybrid_search namespace=ticket query="unassigned support tickets" limit=50`
+### Step 2: Pull ALL Open Support Tickets (mirror vista-549)
 
-Get details via `get_ticket`. Extract: display_id, title, tnt__customer_cohort_dropdown, severity, stage, owned_by, account, sentiment, sla_summary.
+Run MULTIPLE searches to maximize coverage (hybrid_search can't filter by state, so we cast a wide net):
 
-Group by cohort: DEDICATED (1-Reliance, 1-DTDC, 2-Aramex, 2-HNK), 3PL (4A+5A), ON-DEMAND (3A), OTHER.
-Exclude WMS cohort.
+```
+hybrid_search namespace=ticket query="support tickets currently open queued not resolved" limit=50
+hybrid_search namespace=ticket query="support tickets in progress awaiting response" limit=50
+hybrid_search namespace=ticket query="support tickets awaiting development not closed" limit=50
+hybrid_search namespace=ticket query="support tickets reopened reopen" limit=50
+hybrid_search namespace=ticket query="unassigned support tickets open" limit=50
+hybrid_search namespace=ticket query="support tickets frustrated unhappy sentiment open" limit=50
+```
 
-### Step 3: Scan Slack Channels (last 24h)
+**For EACH unique ticket found, get full details via get_ticket. FILTER: only keep tickets where `state` = "open" or "in_progress". Discard state="closed".**
+
+Extract per ticket:
+- `display_id` — clickable as `<https://app.devrev.ai/shipsy/works/TKT-XXXXX|TKT-XXXXX>`
+- `title`
+- `tnt__customer_cohort_dropdown` — cohort
+- `tnt__pod` — pod
+- `severity_v2.label`
+- `stage.name` — Queued / In Progress / Awaiting Customer Response / Awaiting Development / Reopen
+- `state` — MUST be "open" or "in_progress"
+- `owned_by[0].display_name` — owner (flag if "Unassigned")
+- `account.display_name` — customer
+- `sentiment.label` — Happy/Neutral/Unhappy/Frustrated
+- `sla_summary` — for each metric: status = hit/miss/in_progress, remaining_time
+- `needs_response` — true/false
+- `created_date` — for age calculation
+- `tnt__work_duration`
+
+### Step 3: Group & Aggregate
+
+**By Cohort (exclude WMS):**
+- DEDICATED: 1-Reliance, 1-DTDC, 2-Aramex, 2-HNK
+- 3PL: 4A-B2C Shipper, 4A-B2C LSP, 5A-B2B LSP, 5A-B2B Shipper
+- ON-DEMAND: 3A-On Demand, 3B-S (On Demand)
+- OTHER: Exim, Platform, TBD, empty
+
+**By Account:** which accounts have most open tickets
+
+**Metrics:**
+- Total open count
+- Unassigned count (owned_by = Unassigned/SVCACC-46)
+- SLA breached count (status = miss or remaining_time < 0)
+- Frustrated/Unhappy count
+- Needs response count
+
+### Step 4: Scan Slack Channels (last 24h)
+Read with `oldest` = 24h ago, `limit` = 20, `response_format` = concise:
+
 - `C07BQD5776Y` — frustrated customer alerts
 - `C0AU4MT6MUK` — escalations
 - `C09P8BC41PW` — Aramex WhatsApp
@@ -34,51 +81,50 @@ Exclude WMS cohort.
 - `C081GJ2M0LW` — Qatar Post external
 - `C07UZFTU7C4` — Movin
 
-### Step 4: Format & Post to BOTH channels
+### Step 5: Format & Post to BOTH channels
 
 ```
 *CX Pulse — Daily Support Brief* | {{day}}, {{date}}
+_Source: vista-549 (Support - open tickets)_
 
-*{{open}} open* · *{{on_duty}} on duty* · *{{frustrated}} frustrated alerts* · *{{sla_breached}} SLA breached* · *{{unassigned}} unassigned*
+*{{open}} open* · *{{on_duty}} on duty* · *{{frustrated}} frustrated* · *{{sla_breached}} SLA breached* · *{{unassigned}} unassigned* · *{{needs_response}} needs response*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 :pushpin: *Headlines*
-SLA Hit Rate: {{pct}}% {{color}}  |  Frustrated: {{count}} alerts {{color}}
-On Duty: {{on_duty}}/{{total}} {{weekend note if applicable}} {{color}}
-Gap: {{one-liner about biggest risk today}}
+SLA Hit Rate: {{pct}}% {{color}}  |  Frustrated: {{count}} {{color}}
+On Duty: {{on_duty}}/{{total}} {{note}} {{color}}
+Gap: {{one-liner biggest risk}}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-:bar_chart: *By Cohort* — {{color per cohort}}
+:bar_chart: *By Cohort*
 
 ```
-Cohort         | Open | Frust | SLA%  | Duty Today
----------------|------|-------|-------|------------
-3PL (4A+5A)    | ...  | ...   | ...   | {{names or "None"}}
-On-Demand (3A) | ...  | ...   | ...   | ...
-Dedicated      | ...  | ...   | ...   | ...
+Cohort         | Open | Frust | SLA%  | Unsgn | Duty Today
+---------------|------|-------|-------|-------|------------
+...
 ```
 
-:office: *By Account* — top ticket generators
+:office: *By Account*
 
 ```
-Account              | Open | Frust | Key Issue
----------------------|------|-------|-----------------------------
-{{top accounts}}
+Account              | Open | Frust | SLA   | Key Issue
+---------------------|------|-------|-------|-----------------------------
+...
 ```
 
-:ticket: *Open Tickets*
+:ticket: *Open Tickets (Morning Baseline)*
 
 *{{Cohort}}* {{color}}
-> <https://app.devrev.ai/shipsy/works/TKT-XXXXX|TKT-XXXXX> {{Account}} — {{title}} | {{owner}} {{on duty?}} | {{SLA status}}
-[repeat per ticket]
+• TKT-XXXXX {{Account}} — {{title}} | {{owner}} {{on/off}} | {{stage}} | {{SLA status}}
+[repeat per ticket — THIS LIST IS THE MORNING BASELINE]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 :satellite: *Channel Signals* (last 24h)
 
 ```
-Source                          | Signals | Key Issue
---------------------------------|---------|------------------
-{{channel}}                     | {{cnt}} | {{summary or "Silent"}}
+Source                           | Signals | Key Issue
+---------------------------------|---------|------------------
+...
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -89,30 +135,32 @@ ON DUTY
 {{Name}}     {{bars}}  {{count}} open   {{shift}}  ({{cohort}})
 
 OFF TODAY (with open tickets)
-{{Name}}     {{bars}}  {{count}} open   {{status}}
+{{Name}}     {{bars}}  {{count}} open   WO/PL
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 :bulb: *Notable Today*
-• {{insight 1 — pattern from data}}
-• {{insight 2 — risk or anomaly}}
-• {{insight 3 — coverage gap or positive note}}
+• {{insight 1}}
+• {{insight 2}}
+• {{insight 3}}
 
 :dart: *Actions*
-1. *{{Person}}* → {{ticket}} {{account}}: {{what to do and why}}
-2. ...
-3. ...
+1. *{{Person}}* → {{ticket}} {{account}}: {{what and why}}
+...
 ```
+
+## CRITICAL: Morning Baseline
+The "Open Tickets" section is the MORNING BASELINE. The evening routine will re-check every ticket listed here and report: RESOLVED or STILL OPEN. This creates a closed-loop accountability system.
 
 ## Rules
 
 1. NEVER fabricate data. Only report what DevRev returns.
 2. Clickable links: `<https://app.devrev.ai/shipsy/works/TKT-XXXXX|TKT-XXXXX>`
-3. Cross-reference roster with ticket owners — flag if owner OFF.
-4. Keep under 4000 characters.
-5. Weekend: emphasize coverage gaps.
-6. 3PL (4A+5A) is historically most stretched — always show SLA miss rate.
-7. Exclude WMS team and WMS cohort.
-8. Channel Signals: only show channels with actual activity. Mark others "Silent".
-9. Notable Today: real insights from the data, not generic statements.
-10. Actions: exactly 3-5 items, each with person + ticket + reason.
+3. Only include tickets where state = "open" or "in_progress". Never include state = "closed".
+4. Cross-reference roster with owners — flag if owner is OFF.
+5. Keep under 4000 characters.
+6. Weekend: emphasize coverage gaps, note SLA timer pause.
+7. 3PL (4A+5A) — always show SLA miss rate and workload ratio.
+8. Exclude WMS team and WMS cohort.
+9. Channel Signals: only show channels with activity. Mark others "Silent".
+10. Actions: 3-5 items, each with person + ticket + reason.
